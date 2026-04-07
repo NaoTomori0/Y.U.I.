@@ -56,11 +56,10 @@ def load_history():
 
 
 def listen_to_me():
-    """Слушает микрофон и возвращает текст с увеличенным временем ожидания."""
     r = sr.Recognizer()
 
     r.pause_threshold = 2.0
-    r.energy_threshold = 300
+    # r.energy_threshold = 300
     # ------------------------------------------
 
     with sr.Microphone() as source:
@@ -133,6 +132,7 @@ def speak(text):
 
 def get_yui_response(prompt, is_auto=False):
     global last_chat_time
+    last_chat_time = time.time()
     if is_auto:
         messages.append(
             {
@@ -172,7 +172,7 @@ def get_yui_response(prompt, is_auto=False):
 def auto_talk_loop():
     while True:
         time.sleep(10)
-        if time.time() - last_chat_time > 45:
+        if time.time() - last_chat_time > 90:
             print()
             get_yui_response("", is_auto=True)
 
@@ -188,7 +188,7 @@ def clean_response(text):
     return text.strip()
 
 
-threading.Thread(target=auto_talk_loop, daemon=True).start()
+# threading.Thread(target=auto_talk_loop, daemon=True).start()
 
 print(f"\n---------------------------------------------")
 print("1. Просто нажми ENTER, чтобы поговорить голосом.")
