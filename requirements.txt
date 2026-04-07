@@ -39,9 +39,13 @@ nvidia-nvtx==13.0.85
 ollama==0.6.1
 openai-whisper==20250625
 pillow==12.2.0
+PyAudio==0.2.14
 pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.0
+PyQt6_sip==13.11.1
 regex==2026.4.4
 requests==2.33.1
 setuptools==81.0.0
