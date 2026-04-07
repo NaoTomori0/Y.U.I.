@@ -3,7 +3,7 @@ import time
 import json
 import os
 import warnings
-
+import re
 import torch
 import speech_recognition as sr
 import sounddevice as sd
@@ -23,6 +23,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from datetime import datetime
+
+
+def get_current_timestamp():
+    return datetime.now().strftime("%d.%m.%Y %H:%M")
+
 
 warnings.filterwarnings("ignore")
 
@@ -53,6 +59,21 @@ print("[Загружаю Whisper...]")
 whisper_model = whisper.load_model(WHISPER_SIZE)
 
 
+def build_time_summary(history, max_entries=20):
+    if not history:
+        return "Диалог только начался."
+    summary = "Последние сообщения:\n"
+    for msg in history[-max_entries:]:
+        role = "Пользователь" if msg["role"] == "user" else "Ассистент"
+        ts = msg.get("timestamp", "неизвестно")
+        # Можно добавить и сам текст сообщения (кратко), но только если он короткий
+        content_preview = (
+            msg["content"][:30] + "…" if len(msg["content"]) > 30 else msg["content"]
+        )
+        summary += f"- {role} ({ts}): «{content_preview}»\n"
+    return summary.strip()
+
+
 def load_history():
     """Загружает историю диалога из JSON."""
     if os.path.exists(HISTORY_FILE):
@@ -78,7 +99,9 @@ def save_history(messages):
 
 
 def clean_response(text):
-    """Удаляет из ответа модели реплики за пользователя и лишние метки."""
+    text = text.replace("<|im_end|>", "").replace("<|im_start|>", "")
+
+    text = re.sub(r"\s+", " ", text)
     markers = ["Нао:", "Ты:", "Yui:", "\nНао:", "\nТы:", "\nYui:"]
     for marker in markers:
         if marker in text:
@@ -149,6 +172,33 @@ class TTSWorker(QThread):
             self.finished.emit()
 
 
+def build_system_prompt(history, now_str):
+    hour = datetime.now().hour
+    if 5 <= hour < 12:
+        greeting = "утро"
+    elif 12 <= hour < 18:
+        greeting = "день"
+    elif 18 <= hour < 23:
+        greeting = "вечер"
+    else:
+        greeting = "ночь"
+
+    time_summary = build_time_summary(history, max_entries=3)  # сократим до 3
+
+    return (
+        f"Сейчас {now_str} ({greeting}).\n"
+        f"{time_summary}\n\n"
+        "для естественного общения (например, «ты спрашивал вчера вечером»). "
+        "Не вставляй в ответы служебные метки вроде [дата] или <|im_end|>.\n"
+        "Правила прощания:\n"
+        "- Если пользователь говорит 'спокойной ночи', 'доброй ночи' и т.п., "
+        "ты отвечаешь 'Сладких снов, Нао' или 'Доброй ночи' (не используй 'до свидания').\n"
+        "- Не начинай прощание фразой 'Добрый вечер', если уже ночь.\n"
+        "- Не используй формальные прощания вроде 'до свидания' без явной просьбы.\n"
+        "Не повторяй шаблонные фразы из предыдущих ответов."
+    )
+
+
 class OllamaWorker(QThread):
     chunk_received = pyqtSignal(str)
     finished = pyqtSignal(str)
@@ -160,10 +210,28 @@ class OllamaWorker(QThread):
 
     def run(self):
         try:
-            self.history.append({"role": "user", "content": self.prompt})
+            now_str = get_current_timestamp()
+            user_msg = {
+                "role": "user",
+                "content": self.prompt,
+                "timestamp": now_str,
+            }
+            self.history.append(user_msg)
             save_history(self.history)
 
-            stream = ollama.chat(model=MODEL_NAME, messages=self.history, stream=True)
+            messages_for_ollama = [
+                {"role": msg["role"], "content": msg["content"]} for msg in self.history
+            ]
+            time_summary = build_time_summary(self.history, max_entries=15)
+            system_msg = {
+                "role": "system",
+                "content": build_system_prompt(self.history, now_str),
+            }
+            messages_for_ollama.insert(0, system_msg)
+
+            stream = ollama.chat(
+                model=MODEL_NAME, messages=messages_for_ollama, stream=True
+            )
             full_response = ""
             for chunk in stream:
                 content = chunk["message"]["content"]
@@ -171,7 +239,14 @@ class OllamaWorker(QThread):
                 self.chunk_received.emit(content)
 
             full_response = clean_response(full_response)
-            self.history.append({"role": "assistant", "content": full_response})
+
+            assistant_msg = {
+                "role": "assistant",
+                "content": full_response,
+                "timestamp": get_current_timestamp(),
+            }
+
+            self.history.append(assistant_msg)
             save_history(self.history)
             self.finished.emit(full_response)
         except Exception as e:
@@ -180,7 +255,7 @@ class OllamaWorker(QThread):
 
 # ========== GUI ==========
 class ChatBubble(QFrame):
-    def __init__(self, text, is_user=True):
+    def __init__(self, text, is_user=True, timestamp=""):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 12, 15, 12)
@@ -194,7 +269,7 @@ class ChatBubble(QFrame):
         self.label.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Minimum
         )
-        self.label.setMinimumSize(self.label.sizeHint() * 1.3)
+        self.label.setMinimumSize(self.label.sizeHint() * 1.45)
 
         # self.label.setSizePolicy(
         #     QtWidgets.QSizePolicy.Policy.Expanding,
@@ -212,6 +287,13 @@ class ChatBubble(QFrame):
         )
 
         layout.addWidget(self.label)
+        if timestamp:
+            self.time_label = QLabel(timestamp)
+            self.time_label.setStyleSheet(
+                "color: #aaa; font-size: 10px; margin-top: 5px;"
+            )
+            self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+            layout.addWidget(self.time_label)
         color = "#2b5278" if is_user else "#32353b"
         radius = "15px 15px 2px 15px" if is_user else "15px 15px 15px 2px"
 
@@ -305,13 +387,14 @@ class YuiApp(QWidget):
 
     def restore_history_to_chat(self):
         for msg in self.history:
+            timp = msg["timestamp"] if "timestamp" in msg else ""
             if msg["role"] == "user":
-                self.add_bubble(msg["content"], is_user=True)
+                self.add_bubble(msg["content"], is_user=True, timestamp=timp)
             elif msg["role"] == "assistant":
-                self.add_bubble(msg["content"], is_user=False)
+                self.add_bubble(msg["content"], is_user=False, timestamp=timp)
 
-    def add_bubble(self, text, is_user):
-        bubble = ChatBubble(text, is_user)
+    def add_bubble(self, text, is_user, timestamp=""):
+        bubble = ChatBubble(text, is_user, timestamp)
         align = Qt.AlignmentFlag.AlignRight if is_user else Qt.AlignmentFlag.AlignLeft
         self.chat_layout.insertWidget(
             self.chat_layout.count() - 1, bubble, alignment=align
@@ -329,9 +412,12 @@ class YuiApp(QWidget):
         self.btn_send.setEnabled(False)
         self.btn_voice.setEnabled(False)
 
-        self.add_bubble(text, True)
+        self.add_bubble(text, True, timestamp=get_current_timestamp())
+        self.scroll_to_bottom()
 
-        self.current_response_bubble = self.add_bubble("", is_user=False)
+        self.current_response_bubble = self.add_bubble(
+            "", is_user=False, timestamp=get_current_timestamp()
+        )
 
         self.worker = OllamaWorker(text, self.history)
         self.worker.chunk_received.connect(self.on_chunk_received)
