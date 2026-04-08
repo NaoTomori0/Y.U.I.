@@ -11,22 +11,6 @@ import whisper
 import ollama
 import subprocess
 
-
-def prepare_model():
-    print("Создание модели Ollama...")
-    try:
-
-        subprocess.run(["ollama", "create", "yui", "-f", "Modelfile"], check=True)
-        print("Модель 'yui' успешно создана.")
-    except subprocess.CalledProcessError as e:
-        print(f"Ошибка при создании модели: {e}")
-        sys.exit(1)
-
-
-prepare_model()
-
-print("Теперь работает основной код Python")
-
 from PyQt6.QtWidgets import (
     QApplication,
     QWidget,
@@ -54,6 +38,22 @@ WHISPER_SIZE = "base"
 VOICE_URL = "https://models.silero.ai/models/tts/ru/v3_ru.pt"
 HISTORY_FILE = "chat_history.json"
 VOICE_PATH = "model.pt"
+
+
+def prepare_model():
+    print("Создание модели Ollama...")
+    try:
+
+        subprocess.run(["ollama", "create", MODEL_NAME, "-f", "Modelfile"], check=True)
+        print("Модель 'yui' успешно создана.")
+    except subprocess.CalledProcessError as e:
+        print(f"Ошибка при создании модели: {e}")
+        sys.exit(1)
+
+
+prepare_model()
+
+print("Теперь работает основной код Python")
 
 # ========== Загрузка моделей ==========
 device = torch.device("cpu")
