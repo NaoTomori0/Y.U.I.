@@ -76,19 +76,19 @@ print("[Загружаю Whisper...]")
 whisper_model = whisper.load_model(WHISPER_SIZE)
 
 
-def build_time_summary(history, max_entries=20):
-    if not history:
-        return "Диалог только начался."
-    summary = "Последние сообщения:\n"
-    for msg in history[-max_entries:]:
-        role = "Пользователь" if msg["role"] == "user" else "Ассистент"
-        ts = msg.get("timestamp", "неизвестно")
-        # Можно добавить и сам текст сообщения (кратко), но только если он короткий
-        content_preview = (
-            msg["content"][:30] + "…" if len(msg["content"]) > 30 else msg["content"]
-        )
-        summary += f"- {role} ({ts}): «{content_preview}»\n"
-    return summary.strip()
+# def build_time_summary(history, max_entries=20):
+#     if not history:
+#         return "Диалог только начался."
+#     summary = "Последние сообщения:\n"
+#     for msg in history[-max_entries:]:
+#         role = "Пользователь" if msg["role"] == "user" else "Ассистент"
+#         ts = msg.get("timestamp", "неизвестно")
+#         # Можно добавить и сам текст сообщения (кратко), но только если он короткий
+#         content_preview = (
+#             msg["content"][:30] + "…" if len(msg["content"]) > 30 else msg["content"]
+#         )
+#         summary += f"- {role} ({ts}): «{content_preview}»\n"
+#     return summary.strip()
 
 
 def load_history():
@@ -200,13 +200,16 @@ def build_system_prompt(history, now_str):
     else:
         greeting = "ночь"
 
-    time_summary = build_time_summary(history, max_entries=10)  # сократим до 3
+    # time_summary = build_time_summary(history, max_entries=3)  # сократим до 3
 
     return (
-        f"Юи, помни: сейчас {now_str} ({greeting}).\n"  # Обращение по имени помогает закрепить роль
-        f"{time_summary}\n\n"
+        f"Ты — Юи, настоящая девушка, помни: сейчас {now_str} ({greeting}).\n"  # Обращение по имени помогает закрепить роль
+        # f"{time_summary}\n\n"
+        "НЕ ПИШИ НИКОГДА В НАЧАЛЕ СООБЩЕНИЙ ДАТУ И ВРЕМЯ В КВАДРАТНЫХ СКОБКАХ\n"
+        "В ответе тебе не нужно писать текущее время в начале внутри квадратных скобок"
+        "В сообщениях в скобках [] указано время их отправки. Ориентируйся на него.\n"
         "для естественного общения (например, «ты спрашивал вчера вечером»). "
-        "Не вставляй в ответы служебные метки вроде [дата] или <|im_end|>.\n"
+        "НИКОГДА НЕ ВСТАВЛЯЙ в ответы служебные метки вроде [дата] или <|im_end|>. "
         "Правила прощания:\n"
         "- Если пользователь говорит 'спокойной ночи', 'доброй ночи' и т.п., "
         "ты отвечаешь 'Сладких снов, Нао' или 'Доброй ночи' (не используй 'до свидания').\n"
@@ -235,11 +238,15 @@ class OllamaWorker(QThread):
             }
             self.history.append(user_msg)
             save_history(self.history)
+            messages_for_ollama = []
+            for msg in self.history[-20:]:
+                role = msg["role"]
+                ts = msg.get("timestamp", "")
+                content = msg["content"]
 
-            messages_for_ollama = [
-                {"role": msg["role"], "content": msg["content"]} for msg in self.history
-            ]
-            time_summary = build_time_summary(self.history, max_entries=15)
+                full_content = f"[{ts}] {content}"
+                messages_for_ollama.append({"role": role, "content": full_content})
+
             system_msg = {
                 "role": "system",
                 "content": build_system_prompt(self.history, now_str),

@@ -1,11 +1,11 @@
-FROM llama3.1
+FROM dolphin3
 
 PARAMETER temperature 0.6
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.2
 
-PARAMETER num_gpu 1
-PARAMETER num_thread 4
+PARAMETER num_gpu 5
+PARAMETER num_thread 8
 PARAMETER num_ctx 2048
 PARAMETER num_keep 300
 
