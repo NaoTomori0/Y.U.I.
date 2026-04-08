@@ -9,6 +9,23 @@ import speech_recognition as sr
 import sounddevice as sd
 import whisper
 import ollama
+import subprocess
+
+
+def prepare_model():
+    print("Создание модели Ollama...")
+    try:
+
+        subprocess.run(["ollama", "create", "yui", "-f", "Modelfile"], check=True)
+        print("Модель 'yui' успешно создана.")
+    except subprocess.CalledProcessError as e:
+        print(f"Ошибка при создании модели: {e}")
+        sys.exit(1)
+
+
+prepare_model()
+
+print("Теперь работает основной код Python")
 
 from PyQt6.QtWidgets import (
     QApplication,
