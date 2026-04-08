@@ -200,10 +200,10 @@ def build_system_prompt(history, now_str):
     else:
         greeting = "ночь"
 
-    time_summary = build_time_summary(history, max_entries=3)  # сократим до 3
+    time_summary = build_time_summary(history, max_entries=10)  # сократим до 3
 
     return (
-        f"Сейчас {now_str} ({greeting}).\n"
+        f"Юи, помни: сейчас {now_str} ({greeting}).\n"  # Обращение по имени помогает закрепить роль
         f"{time_summary}\n\n"
         "для естественного общения (например, «ты спрашивал вчера вечером»). "
         "Не вставляй в ответы служебные метки вроде [дата] или <|im_end|>.\n"
